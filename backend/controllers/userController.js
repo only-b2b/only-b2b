@@ -5,6 +5,7 @@ const parseAndSaveFile = require('../utils/csvParser');
 const { Parser } = require('json2csv');
 const XLSX = require('xlsx');
 const { createExportSnapshot } = require('./exportSnapshotController'); // make sure this path/file exists
+const { redactUserRowNA } = require('../utils/sanitize');
 
 // ✅ GET USERS with full support for search, filters, pagination, sorting
 const getUsers = async (req, res) => {
@@ -146,6 +147,9 @@ const exportUsers = async (req, res) => {
     // Fetch exact rows to export
     const users = await User.find(finalQuery).select(projection).lean();
 
+    // Redact sensitive fields with "NA"
+      const redactedUsers = users.map(redactUserRowNA);
+      
     // Build a normalized filters object for the snapshot
     const filtersObj = {};
     Object.entries(req.query).forEach(([k, v]) => {
@@ -166,7 +170,7 @@ const exportUsers = async (req, res) => {
         format: fmt,
         fields: fieldArray,
         filters: { search, ...filtersObj },
-        users,                      // exact rows
+        users: redactedUsers, // exact rows (masked)    
       });
 
       await Activity.create({
@@ -186,7 +190,7 @@ const exportUsers = async (req, res) => {
 
     // Send file
     if (String(format).toLowerCase() === 'xlsx') {
-      const worksheet = XLSX.utils.json_to_sheet(users);
+      const worksheet = XLSX.utils.json_to_sheet(redactedUsers);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Users');
       const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' });
@@ -197,7 +201,7 @@ const exportUsers = async (req, res) => {
     }
 
     const parser = new Parser({ fields: fieldArray.length > 0 ? fieldArray : undefined });
-    const csv = parser.parse(users);
+    const csv = parser.parse(redactedUsers);
     res.setHeader('Content-Disposition', 'attachment; filename=users.csv');
     res.type('text/csv');
     return res.send(csv);

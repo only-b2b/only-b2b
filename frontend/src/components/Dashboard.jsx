@@ -1,6 +1,7 @@
 // ========================= src/components/Dashboard.jsx (UPDATED) =========================
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { COUNTRIES } from "../constants/countries";
 import api from "../api/apiClient";
 import {
   ChevronLeft,
@@ -14,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import "../style/Dashboard.css";
+
 
 export default function Dashboard() {
   // Pagination / sorting / search
@@ -52,6 +54,7 @@ export default function Dashboard() {
     Level: [],
     MainIndustry: [],
     EmployeeSize: [],
+    Country: [],
   });
 
   const predefinedFilters = useMemo(
@@ -115,6 +118,7 @@ export default function Dashboard() {
         "5000-10000",
         "10001+",
       ],
+      Country: COUNTRIES,  
     }),
     []
   );
@@ -217,7 +221,7 @@ export default function Dashboard() {
 
   const clearFilters = () => {
     setSearch("");
-    setMultiFilters({ Dept: [], Level: [], MainIndustry: [], EmployeeSize: [] });
+    setMultiFilters({ Dept: [], Level: [], MainIndustry: [], EmployeeSize: [], Country: [] });
     setPage(1);
   };
 
@@ -396,9 +400,14 @@ export default function Dashboard() {
                   ) : (
                     data?.users?.map((u) => (
                       <tr key={u._id}>
-                        {selectedFields.map((k) => (
+                        {/* {selectedFields.map((k) => (
                           <td key={k} data-label={getLabelForField(k)}>
                             {renderCell(u[k])}
+                          </td>
+                        ))} */}
+                        {selectedFields.map((k) => (
+                          <td key={k} data-label={getLabelForField(k)}>
+                            {renderCell(u[k], k)}
                           </td>
                         ))}
                       </tr>
@@ -471,6 +480,17 @@ function SkeletonRows({ cols = 5, rows = 8 }) {
 }
 
 function FilterPanel({ predefinedFilters, multiFilters, toggleFilterOption, clearFilters }) {
+  const [open, setOpen] = useState({
+    Dept: false,
+    Level: false,
+    MainIndustry: false,
+    EmployeeSize: false,
+    Country: false,
+  });
+
+  const toggleOpen = (field) =>
+    setOpen((o) => ({ ...o, [field]: !o[field] }));
+
   return (
     <div className="panel">
       <div className="panel-head">
@@ -478,10 +498,37 @@ function FilterPanel({ predefinedFilters, multiFilters, toggleFilterOption, clea
         <button className="link" onClick={clearFilters}>Clear all</button>
       </div>
 
-      {Object.entries(predefinedFilters).map(([field, options]) => (
-        <div key={field} className="filter-block">
-          <div className="filter-label">{field}</div>
-          <div className="filter-options">
+      {Object.entries(predefinedFilters).map(([field, options]) => {
+        const isOpen = open[field];
+        const selectedCount = multiFilters[field]?.length ?? 0;
+        const sectionId = `filter-${field}`;
+
+        return (
+          <div key={field} className="filter-block">
+            <button
+              className="filter-toggle"
+              aria-expanded={isOpen}
+              aria-controls={sectionId}
+              onClick={() => toggleOpen(field)}
+              type="button"
+            >
+              <span className="filter-label">{field}</span>
+              {selectedCount > 0 && <span className="badge">{selectedCount}</span>}
+              <span className="chev" aria-hidden>
+                {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              </span>
+            </button>
+
+            {isOpen && (
+              field === "Country" ? (
+          <CountrySearchableOptions
+            sectionId={sectionId}
+            options={options}
+            selected={multiFilters[field] ?? []}
+            onToggle={(v) => toggleFilterOption(field, v)}
+          />
+        ) : (
+          <div id={sectionId} className="filter-options" role="region" aria-label={`${field} options`}>
             {options.map((opt) => (
               <label key={opt} className="option">
                 <input
@@ -492,20 +539,30 @@ function FilterPanel({ predefinedFilters, multiFilters, toggleFilterOption, clea
                 <span>{opt}</span>
               </label>
             ))}
-          </div>
 
-          {multiFilters[field]?.length > 0 && (
-            <div className="chip-row">
-              {multiFilters[field].map((v) => (
-                <span className="chip" key={v}>
-                  {v}
-                  <button className="chip-x" onClick={() => toggleFilterOption(field, v)} aria-label={`Remove ${v}`}><X size={12} aria-hidden /></button>
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
+            {selectedCount > 0 && (
+              <div className="chip-row">
+                {multiFilters[field].map((v) => (
+                  <span className="chip" key={v}>
+                    {v}
+                    <button
+                      className="chip-x"
+                      onClick={() => toggleFilterOption(field, v)}
+                      aria-label={`Remove ${v}`}
+                    >
+                      <X size={12} aria-hidden />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+            )}
+          </div>
+        );
+      })}
+      
 
       <div className="tips">
         <strong>Tips</strong>
@@ -519,8 +576,116 @@ function FilterPanel({ predefinedFilters, multiFilters, toggleFilterOption, clea
   );
 }
 
-function renderCell(value) {
+function CountrySearchableOptions({ sectionId, options, selected, onToggle }) {
+  const [q, setQ] = useState("");
+  const filtered = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    return s ? options.filter((c) => c.toLowerCase().includes(s)) : options;
+  }, [q, options]);
+
+  return (
+    <div id={sectionId} role="region" aria-label="Country options">
+      <div className="country-search">
+        <input
+          placeholder="Search country…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          aria-label="Search country"
+        />
+      </div>
+
+      <div className="filter-options">
+        {filtered.map((opt) => (
+          <label key={opt} className="option">
+            <input
+              type="checkbox"
+              checked={selected.includes(opt)}
+              onChange={() => onToggle(opt)}
+            />
+            <span>{opt}</span>
+          </label>
+        ))}
+      </div>
+
+      {selected.length > 0 && (
+        <div className="chip-row">
+          {selected.map((v) => (
+            <span className="chip" key={v}>
+              {v}
+              <button
+                className="chip-x"
+                onClick={() => onToggle(v)}
+                aria-label={`Remove ${v}`}
+              >
+                <X size={12} aria-hidden />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+
+// function renderCell(value) {
+//   if (value === null || value === undefined) return "—";
+//   if (typeof value === "string") {
+//     const isLink = /^(https?:\/\/|www\.)/i.test(value);
+//     if (isLink) {
+//       const href = value.startsWith("http") ? value : `https://${value}`;
+//       return (
+//         <a href={href} target="_blank" rel="noreferrer" className="cell-link">
+//           {value}
+//         </a>
+//       );
+//     }
+//   }
+//   return String(value);
+// }
+
+function maskEmail(email) {
+  if (typeof email !== "string" || !email.includes("@")) return "••••";
+  const [local, domainFull] = email.split("@");
+  const [domain, ...tldParts] = domainFull.split(".");
+  const tld = tldParts.length ? "." + tldParts.join(".") : "";
+
+  const keepLocal = Math.min(2, local.length);
+  const keepDomain = Math.min(1, domain.length);
+
+  const maskedLocal =
+    local.slice(0, keepLocal) + "•".repeat(Math.max(0, local.length - keepLocal));
+  const maskedDomain =
+    domain.slice(0, keepDomain) + "•".repeat(Math.max(0, domain.length - keepDomain));
+
+  return `${maskedLocal}@${maskedDomain}${tld || ""}`;
+}
+
+function maskPhone(raw) {
+  if (raw == null) return "—";
+  const s = String(raw);
+  const digits = s.replace(/\D/g, "");
+  if (digits.length === 0) return "••••";
+  const last = digits.slice(-4);
+  // show country code if present (e.g., +1, +44), then mask middle entirely
+  const ccMatch = s.match(/^\+\d{1,3}/);
+  const cc = ccMatch ? ccMatch[0] + " " : "";
+  return `${cc}••••••${last}`;
+}
+
+function renderCell(value, fieldKey) {
   if (value === null || value === undefined) return "—";
+
+  // Mask specific fields
+  if (fieldKey === "EmailID") {
+    return <span className="masked">{maskEmail(String(value))}</span>;
+  }
+  if (fieldKey === "DirectNumber" || fieldKey === "CompanyNumber") {
+    return <span className="masked">{maskPhone(value)}</span>;
+  }
+
+  // Linkify non-sensitive strings
   if (typeof value === "string") {
     const isLink = /^(https?:\/\/|www\.)/i.test(value);
     if (isLink) {

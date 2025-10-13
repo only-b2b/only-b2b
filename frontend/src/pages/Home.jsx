@@ -20,13 +20,13 @@ export default function Home() {
 
   // Redirect to login if there's no session
   useEffect(() => {
-    const token = localStorage.getItem("token");
+    const token = sessionStorage.getItem("token") || localStorage.getItem("token");
     if (!token) navigate("/login", { replace: true });
   }, [navigate]);
 
   // Load user object
   useEffect(() => {
-    const raw = localStorage.getItem("user");
+    const raw = sessionStorage.getItem("user") || localStorage.getItem("user");
     if (!raw) return;
     try { setUser(JSON.parse(raw)); } catch {}
   }, []);
@@ -45,8 +45,8 @@ export default function Home() {
 
   const onLogout = () => {
     // clear both, just in case
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
+    localStorage.removeItem("token"); localStorage.removeItem("user");
+    sessionStorage.removeItem("token"); sessionStorage.removeItem("user");
     sessionStorage.removeItem("AUDIT_CODE");
     navigate("/login", { replace: true });
   };
@@ -95,13 +95,31 @@ export default function Home() {
           </div>
         </div>
 
-        <section className="user-card" role="region" aria-label="Your account" id="upload">
-          <div className="panel-head">
-            <h2 className="h2">Upload CSV</h2>
-            <a className="link" href="#" onClick={(e)=>e.preventDefault()}>Formatting guide <ChevronRight size={14}/></a>
-          </div>
-          <UploadCSV />
-        </section>
+        {/* Upload CSV – visible only for admin and auditor */}
+        {/* Upload CSV – only for admin and auditor */}
+          {(role === "admin" || role === "auditor") ? (
+            <section className="user-card" role="region" aria-label="Upload CSV" id="upload">
+              <div className="panel-head">
+                <h2 className="h2">Upload CSV</h2>
+                <a className="link" href="#" onClick={(e)=>e.preventDefault()}>
+                  Formatting guide <ChevronRight size={14}/>
+                </a>
+              </div>
+              <UploadCSV />
+            </section>
+          ) : (
+            <section className="user-card" role="region" aria-label="Upload CSV" id="upload">
+              <div className="panel-head">
+                <h2 className="h2">Upload CSV</h2>
+              </div>
+              <div className="info-box">
+                <p>🚫 You don’t have permission to upload CSV files.  
+                Please contact your administrator if you need access.</p>
+              </div>
+            </section>
+          )}
+
+
       </section>
 
  

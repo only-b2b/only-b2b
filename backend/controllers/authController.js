@@ -44,17 +44,22 @@ const login = async (req, res) => {
 const bootstrapUsers = async (_req, res) => {
   try {
     const seed = [
-      { username: 'rahimat',  name: 'Rahimat Patel',       role: 'admin',   password: 'Passw0rd!1' },
-      { username: 'prem',     name: 'Prem Borkar',         role: 'admin',   password: 'Ghostrider' },
-      { username: 'Hemant.Bhatt',     name: 'Hemant Bhatt',         role: 'admin',   password: 'Hemant@8655' },
-      { username: 'Vikas.Bhatt',     name: 'Vikas Bhatt',         role: 'admin',   password: 'Vikas@8655' },
-      { username: 'auditor',  name: 'Audit Viewer',        role: 'auditor', password: 'Passw0rd!1' },
-      { username: 'shashank', name: 'Shashank Bhardwaj',   role: 'user',    password: 'Shashank123' },
-      { username: 'user2',    name: 'Rohan Mehta',         role: 'user',    password: 'Passw0rd!1' },
-      { username: 'user3',    name: 'Neha Verma',          role: 'user',    password: 'Passw0rd!1' },
-      { username: 'user4',    name: 'Viyom',         role: 'user',    password: 'Passw0rd!1' },
-      { username: 'user5',    name: 'Suraj Nargargoje',          role: 'Admin',    password: 'Suraj@9876' },
-    ];
+        { "username": "ameet.bhinganiya",     "name": "Ameet Bhinganiya",    "role": "admin",   "password": "Ameet@1433" },
+        { "username": "prem.borkar",          "name": "Prem Borkar",         "role": "admin",   "password": "Ghostrider" },
+        { "username": "Hemant.Bhatt",         "name": "Hemant Bhatt",        "role": "admin",   "password": "Hemant@8655" },
+        { "username": "Vikas.Bhatt",          "name": "Vikas Bhatt",         "role": "admin",   "password": "Vikas@8655" },
+        { "username": "suraj.nargargoje",     "name": "Suraj Nargargoje",    "role": "admin",   "password": "Suraj@9876" },
+        { "username": "auditor",              "name": "Audit Viewer",        "role": "auditor", "password": "DareDevil@987" },
+        { "username": "shashank",             "name": "Shashank Bhardwaj",   "role": "user",    "password": "Shashank123" },
+        { "username": "user2",                "name": "Guest User2",         "role": "user",    "password": "Passw0rd!1" },
+        { "username": "user3",                "name": "Guest User3",         "role": "user",    "password": "Passw0rd!1" },
+        { "username": "viyom.daga",           "name": "Viyom Daga",          "role": "user",    "password": "Passw0rd!1" },
+        { "username": "sumeet.agrawal",       "name": "Sumeet Agrawal",      "role": "user",    "password": "Sumeet@571" },
+        { "username": "user4",                "name": "Guest User4",         "role": "user",    "password": "Neelam#2024" },
+        { "username": "user5",                "name": "Guest User5",         "role": "admin",   "password": "ItAdmin!234" },
+        { "username": "user6",                "name": "Guest User6",         "role": "auditor", "password": "Guest@123" },
+        { "username": "user7",                "name": "Guest user7",         "role": "user",    "password": "Kavita@2025" }
+      ];
 
     for (const s of seed) {
       const username = s.username.trim().toLowerCase();  // ✅ normalize
