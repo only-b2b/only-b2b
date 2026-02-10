@@ -17,11 +17,10 @@ const userSchema = new mongoose.Schema({
     State: String,
     PostalCode: String,
     Country: String,
-    EmployeeRange: String,
+    ActiveEmployeeSize: String,
     EmployeeSize: String,   // ✅ added
     Industry: String,
     MainIndustry: String,   // ✅ added
-    SubIndustry: String,
     WebsiteLink: String,
     RevenueSize: String,
     EmployeeLink: String,

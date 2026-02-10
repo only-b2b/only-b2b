@@ -1,4 +1,3 @@
-// backend/utils/sanitize.js
 function maskEmail(email) {
   if (typeof email !== "string" || !email.includes("@")) return "••••";
   const [local, domainFull] = email.split("@");
@@ -28,13 +27,13 @@ function maskPhone(raw) {
 }
 
 /**
- * Return a copy of a user row with sensitive fields masked.
- * Works with both full documents and projection-selected docs.
+ * Redact sensitive fields unless explicitly exporting
  */
-// backend/utils/sanitize.js
+function redactUserRowNA(row = {}, { forExport = false } = {}) {
+  // ✅ EXPORT → return REAL data
+  if (forExport) return row;
 
-// Replace sensitive fields with "NA" for export/snapshots
-function redactUserRowNA(row = {}) {
+  // ❌ UI / snapshot → redact
   const out = { ...row };
   if ("EmailID" in out) out.EmailID = "NA";
   if ("DirectNumber" in out) out.DirectNumber = "NA";
@@ -42,4 +41,8 @@ function redactUserRowNA(row = {}) {
   return out;
 }
 
-module.exports = { redactUserRowNA };
+module.exports = {
+  maskEmail,
+  maskPhone,
+  redactUserRowNA,
+};

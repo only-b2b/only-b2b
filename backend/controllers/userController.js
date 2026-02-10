@@ -4,10 +4,15 @@ const Activity = require('../models/Activity');
 const parseAndSaveFile = require('../utils/csvParser');
 const { Parser } = require('json2csv');
 const XLSX = require('xlsx');
-const { createExportSnapshot } = require('./exportSnapshotController'); // make sure this path/file exists
+const {
+  createExportSnapshot,
+  EXPORT_FIELD_ORDER,
+} = require('./exportSnapshotController');
 const { redactUserRowNA } = require('../utils/sanitize');
 
-// ✅ GET USERS with full support for search, filters, pagination, sorting
+// ============================
+// GET USERS
+// ============================
 const getUsers = async (req, res) => {
   try {
     const {
@@ -22,7 +27,6 @@ const getUsers = async (req, res) => {
     const skip = (Number(page) - 1) * Number(limit);
     const andConditions = [];
 
-    // General search
     if (search) {
       andConditions.push({
         $or: [
@@ -36,70 +40,72 @@ const getUsers = async (req, res) => {
       });
     }
 
-    // Multi-field filters (supports arrays or comma-separated strings)
     Object.entries(filters).forEach(([field, value]) => {
       if (!value) return;
-
       const values = Array.isArray(value)
         ? value
-        : typeof value === 'string' && value.includes(',')
-        ? value.split(',')
+        : String(value).includes(',')
+        ? String(value).split(',')
         : [value];
 
       if (values.length === 1) {
         andConditions.push({ [field]: { $regex: values[0], $options: 'i' } });
       } else {
         andConditions.push({
-          $or: values.map((v) => ({ [field]: { $regex: v, $options: 'i' } })),
+          $or: values.map(v => ({ [field]: { $regex: v, $options: 'i' } })),
         });
       }
     });
 
-    const searchQuery = andConditions.length > 0 ? { $and: andConditions } : {};
-    const sortOptions = { [sortField]: sortOrder === 'asc' ? 1 : -1 };
+    const query = andConditions.length ? { $and: andConditions } : {};
+    const sort = { [sortField]: sortOrder === 'asc' ? 1 : -1 };
 
-    const users = await User.find(searchQuery)
-      .sort(sortOptions)
-      .skip(Number(skip))
+    const users = await User.find(query)
+      .sort(sort)
+      .skip(skip)
       .limit(Number(limit))
       .lean();
 
-    const total = await User.countDocuments(searchQuery);
-
+    const total = await User.countDocuments(query);
     res.json({ users, total });
   } catch (err) {
-    console.error('Error fetching users:', err);
+    console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
-// ✅ UPLOAD CSV (logs who uploaded via req.user)
+// ============================
+// UPLOAD CSV
+// ============================
 const uploadCSV = async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const result = await parseAndSaveFile(req.file.path, req.file.originalname, req.user);
-    const processed = typeof result === 'number' ? result : result.processed;
+    const result = await parseAndSaveFile(
+      req.file.path,
+      req.file.originalname,
+      req.user
+    );
+
     res.json({
       message: `${req.file.originalname} uploaded successfully.`,
-      processed,
-      reportId: result.reportId,
-      stats: result,
+      ...result,
     });
   } catch (err) {
-    console.error('Upload Error:', err);
+    console.error(err);
     res.status(500).json({ error: err.message });
   }
 };
 
-// ✅ EXPORT USERS (CSV / XLSX) with filters + field selection + SNAPSHOT + ACTIVITY
+// ============================
+// EXPORT USERS (CSV / XLSX)
+// ============================
 const exportUsers = async (req, res) => {
   try {
     const { search = '', format = 'csv', fields } = req.query;
 
-    // Build the query like in getUsers
     const clauses = [];
     if (search) {
       clauses.push({
@@ -116,61 +122,64 @@ const exportUsers = async (req, res) => {
 
     const excludedKeys = ['search', 'format', 'fields'];
     Object.entries(req.query).forEach(([field, value]) => {
-      if (excludedKeys.includes(field)) return;
-      if (!value) return;
+      if (excludedKeys.includes(field) || !value) return;
 
       const values = Array.isArray(value)
         ? value
-        : typeof value === 'string' && value.includes(',')
-        ? value.split(',')
+        : String(value).includes(',')
+        ? String(value).split(',')
         : [value];
 
       if (values.length === 1) {
         clauses.push({ [field]: { $regex: values[0], $options: 'i' } });
       } else {
         clauses.push({
-          $or: values.map((v) => ({ [field]: { $regex: v, $options: 'i' } })),
+          $or: values.map(v => ({ [field]: { $regex: v, $options: 'i' } })),
         });
       }
     });
 
-    const finalQuery = clauses.length > 0 ? { $and: clauses } : {};
+    const finalQuery = clauses.length ? { $and: clauses } : {};
 
-    // Field projection
-    let projection = null;
-    let fieldArray = [];
-    if (fields) {
-      fieldArray = fields.split(',').map((f) => f.trim()).filter(Boolean);
-      if (fieldArray.length) projection = fieldArray.join(' ');
-    }
+    // ============================
+    // FINAL COLUMN ORDER
+    // _id FIRST, createdAt/updatedAt LAST
+    // ============================
+    const selectedFields = fields
+      ? fields.split(',').map(f => f.trim()).filter(Boolean)
+      : EXPORT_FIELD_ORDER;
 
-    // Fetch exact rows to export
+    const orderedFields = [
+      '_id',
+      ...selectedFields.filter(
+        f => !['_id', 'createdAt', 'updatedAt'].includes(f)
+      ),
+      'createdAt',
+      'updatedAt',
+    ];
+
+    const projection = orderedFields.join(' ');
+
     const users = await User.find(finalQuery).select(projection).lean();
 
-    // Redact sensitive fields with "NA"
-      const redactedUsers = users.map(redactUserRowNA);
-      
-    // Build a normalized filters object for the snapshot
-    const filtersObj = {};
-    Object.entries(req.query).forEach(([k, v]) => {
-      if (excludedKeys.includes(k) || v == null || v === '') return;
-      const values = Array.isArray(v)
-        ? v
-        : String(v).includes(',')
-        ? String(v).split(',')
-        : [String(v)];
-      filtersObj[k] = values;
+    // REAL DATA FOR EXPORT
+    const exportUsersData = users.map(user => {
+      const clean = redactUserRowNA(user, { forExport: true });
+      const row = {};
+      orderedFields.forEach(f => {
+        row[f] = clean[f] ?? '';
+      });
+      return row;
     });
 
-    // Create snapshot + activity (don’t block response if they fail)
+    // SNAPSHOT + ACTIVITY
     try {
-      const fmt = String(format).toLowerCase();
       const snap = await createExportSnapshot({
-        reqUser: req.user,          // from verifyJWT
-        format: fmt,
-        fields: fieldArray,
-        filters: { search, ...filtersObj },
-        users: redactedUsers, // exact rows (masked)    
+        reqUser: req.user,
+        format: String(format).toLowerCase(),
+        fields: orderedFields,
+        filters: { search },
+        users,
       });
 
       await Activity.create({
@@ -180,28 +189,43 @@ const exportUsers = async (req, res) => {
         method: req.method,
         route: req.originalUrl,
         status: 200,
-        meta: { snapshotId: snap._id, total: snap.total, format: fmt, fields: fieldArray, filters: { search, ...filtersObj } },
-        ip: req.ip,
-        ua: req.headers['user-agent'],
+        meta: { snapshotId: snap._id, total: users.length },
       });
     } catch (e) {
       console.error('snapshot/activity error:', e.message);
     }
 
-    // Send file
+    // ============================
+    // XLSX
+    // ============================
     if (String(format).toLowerCase() === 'xlsx') {
-      const worksheet = XLSX.utils.json_to_sheet(redactedUsers);
+      const worksheetData = [
+        orderedFields,
+        ...exportUsersData.map(u => orderedFields.map(f => u[f])),
+      ];
+
+      const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Users');
-      const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' });
+
+      const buffer = XLSX.write(workbook, {
+        bookType: 'xlsx',
+        type: 'buffer',
+      });
 
       res.setHeader('Content-Disposition', 'attachment; filename=users.xlsx');
-      res.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.type(
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      );
       return res.send(buffer);
     }
 
-    const parser = new Parser({ fields: fieldArray.length > 0 ? fieldArray : undefined });
-    const csv = parser.parse(redactedUsers);
+    // ============================
+    // CSV
+    // ============================
+    const parser = new Parser({ fields: orderedFields });
+    const csv = parser.parse(exportUsersData);
+
     res.setHeader('Content-Disposition', 'attachment; filename=users.csv');
     res.type('text/csv');
     return res.send(csv);

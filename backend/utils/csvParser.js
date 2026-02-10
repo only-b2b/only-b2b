@@ -26,7 +26,7 @@ function normalizeRow(row) {
         PostalCode: row.PostalCode || row["Postal Code"] || "",
         Country: row.Country || "",
 
-        EmployeeRange: row.EmployeeRange || row["Employee Range"] || "",
+        ActiveEmployeeSize: row.ActiveEmployeeSize || row["Active Employee Size"] || "",
         EmployeeSize: row.EmployeeSize || row["Employee Size"] || "", // ✅ map Employee Size
 
         Industry: row.Industry || "",
