@@ -69,7 +69,8 @@ export default function Dashboard() {
       ],
       Level: [
         "Owner",
-        "C-Level",
+        "C-Level", 
+        "Vice President",
         "Executive/Corporate",
         "Director",
         "Manager",
