@@ -117,10 +117,8 @@ export default function Dashboard() {
         "Wholesale and Distributor",
       ],
       EmployeeSize: [
-        "1-10",
-        "11-50",
-        "51-200",
-        "201-500",
+        "1-100",
+        "101-500",
         "501-1000",
         "1001-5000",
         "5000-10000",
