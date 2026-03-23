@@ -1,156 +1,46 @@
-\# MERN CSV/XLSX User Dashboard
+📊 MERN CSV/XLSX User Dashboard
 
+A MERN stack app to upload and manage user data from .csv or .xlsx files.
 
+🚀 Features
+Upload CSV/XLSX files
+Store data in MongoDB Atlas
+Auto-update users based on Email (no duplicates)
+View all data in a paginated dashboard
+Supports large datasets (1 lakh+ records)
+⚙️ Setup
 
-A \*\*full-stack MERN application\*\* that allows you to:
+1. Clone repo
 
-
-
-\- Upload `.csv` or `.xlsx` files containing user data.
-
-\- Store all records in \*\*MongoDB Atlas\*\*.
-
-\- Automatically \*\*update existing users\*\* when data changes (based on Email).
-
-\- Display \*\*all user fields\*\* in a paginated dashboard.
-
-\- Handle \*\*1 lakh+ records\*\* with fast pagination.
-
-
-
----
-
-
-
-\## 📌 Features
-
-
-
-\- \*\*Upload CSV/XLSX\*\* directly from the frontend.
-
-\- \*\*Automatic duplicate detection\*\* by Email.
-
-\- \*\*Upsert functionality\*\*: If a record exists, it is updated instead of duplicated.
-
-\- \*\*20+ fields support\*\*:
-
-
-
-\## ⚙️ Installation
-
-
-
-\### 1. Clone the repository
-
-```bash
-
-git clone https://github.com/yourusername/mern-csv-dashboard.git
-
+git clone <your-repo-link>
 cd mern-csv-dashboard
 
-
-
-2\. Setup backend
-
-
+2. Backend
 
 cd backend
-
 npm install
 
+Create .env:
 
+MONGO_URI=your_mongodb_uri
+PORT=####
 
-
-
-Create a .env file:
-
-
-
-MONGO\_URI=your\_mongodb\_atlas\_connection\_string
-
-PORT=5000
-
-Start backend:
-
-
+Run:
 
 npm run dev
 
-
-
-
-
-3\. Setup frontend
-
-
+3. Frontend
 
 cd ../frontend
-
 npm install
-
 npm run dev
-
-🚀 Usage
-
-Start backend and frontend.
-
-
-
-Open frontend in your browser:
-
-
-
-http://localhost:5173
-
-Use the file input to upload .csv or .xlsx file.
-
-
-
-Data is stored in MongoDB Atlas and shown in the dashboard.
-
-
-
-Pagination lets you browse through large datasets.
-
-
-
-🛠 Technologies Used
-
-MongoDB Atlas — cloud database
-
-
-
-Express.js — backend framework
-
-
-
-React.js + Vite — frontend
-
-
-
-Node.js — runtime
-
-
-
-Mongoose — MongoDB ORM
-
-
-
-React Query — frontend data fetching
-
-
-
-fast-csv — CSV parsing
-
-
-
-xlsx — Excel parsing
-
-
-
-Multer — file uploads
-
-
-
-
-
+🌐 Usage
+Open: http://localhost:5173
+Upload file → Data saves to DB → View in dashboard
+🛠 Tech Stack
+MongoDB Atlas
+Express.js
+React (Vite)
+Node.js
+Mongoose
+Multer + fast-csv + xlsx
