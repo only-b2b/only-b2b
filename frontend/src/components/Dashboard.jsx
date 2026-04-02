@@ -288,31 +288,33 @@ export default function Dashboard() {
     setExportOpen(false);
     showLoading();
 
-    // ✅ FIX: Build correct full URL
-    let baseUrl = import.meta.env.VITE_API_URL;
+    // ✅ FIX: Get token from sessionStorage first, then localStorage
+    const token = sessionStorage.getItem('token') || localStorage.getItem('token');
     
-    // If VITE_API_URL is not set, use relative /api
-    if (!baseUrl) {
-      baseUrl = '/api';
+    if (!token) {
+      throw new Error('You are not logged in. Please login and try again.');
     }
-    
-    // Remove trailing slash if present
-    baseUrl = baseUrl.replace(/\/$/, '');
-    
-    // Make sure baseUrl ends with /api
-    if (!baseUrl.endsWith('/api')) {
-      baseUrl = baseUrl + '/api';
-    }
-    
+
+    // ✅ FIX: Build correct URL using same logic as apiClient
+    const raw = (import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/+$/, "");
+    const baseUrl = /\/api$/.test(raw) ? raw : `${raw}/api`;
     const fullUrl = `${baseUrl}${exportPath}`;
     
     console.log('🔄 Export URL:', fullUrl);
 
+    // ✅ FIX: Include audit code header like apiClient does
+    const headers = {
+      'Authorization': `Bearer ${token}`,
+    };
+    
+    const auditCode = sessionStorage.getItem('AUDIT_CODE');
+    if (auditCode) {
+      headers['X-Audit-Code'] = auditCode;
+    }
+
     const response = await fetch(fullUrl, {
       method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
-      },
+      headers: headers,
     });
 
     hideLoading();
@@ -322,16 +324,32 @@ export default function Dashboard() {
       const contentType = response.headers.get('Content-Type') || '';
       let errorMsg = `HTTP ${response.status}`;
       
+      if (response.status === 401) {
+        errorMsg = 'Session expired. Please login again.';
+        // Redirect to login
+        sessionStorage.removeItem('token');
+        sessionStorage.removeItem('user');
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+        return;
+      }
+      
       if (contentType.includes('text/html')) {
-        // Server returned HTML error page
-        errorMsg = `Server error (${response.status}). The export endpoint may not be available.`;
+        errorMsg = `Server error (${response.status}).`;
+      } else if (contentType.includes('application/json')) {
+        try {
+          const errorData = await response.json();
+          errorMsg = errorData.error || errorData.message || errorMsg;
+        } catch {
+          // Keep default
+        }
       } else {
         try {
           const errorText = await response.text();
-          const errorJson = JSON.parse(errorText);
-          errorMsg = errorJson.error || errorJson.message || errorMsg;
+          if (errorText) errorMsg = errorText;
         } catch {
-          // Keep default error message
+          // Keep default
         }
       }
       
