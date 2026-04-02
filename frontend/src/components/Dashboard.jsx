@@ -250,6 +250,26 @@ export default function Dashboard() {
   };
 
   const handleExport = async (format, onlySelected = false) => {
+    // Create loading element
+    const showLoading = () => {
+      const loadingAlert = document.createElement('div');
+      loadingAlert.id = 'export-loading';
+      loadingAlert.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#1e293b;color:#fff;padding:24px 48px;border-radius:12px;z-index:9999;font-size:16px;box-shadow:0 4px 20px rgba(0,0,0,0.3);';
+      loadingAlert.innerHTML = `
+        <div style="text-align:center;">
+          <div style="margin-bottom:12px;font-size:24px;">⏳</div>
+          <div style="font-weight:600;">Preparing Export...</div>
+          <div style="font-size:13px;opacity:0.7;margin-top:8px;">Large datasets may take several minutes</div>
+        </div>
+      `;
+      document.body.appendChild(loadingAlert);
+    };
+
+    const hideLoading = () => {
+      const el = document.getElementById('export-loading');
+      if (el) el.remove();
+    };
+
     try {
       // Build params
       const params = new URLSearchParams({ search: debouncedSearch, format });
@@ -268,22 +288,12 @@ export default function Dashboard() {
       // Close dropdown
       setExportOpen(false);
 
-      // Show loading message
-      const loadingAlert = document.createElement('div');
-      loadingAlert.id = 'export-loading';
-      loadingAlert.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#1e293b;color:#fff;padding:24px 48px;border-radius:12px;z-index:9999;font-size:16px;box-shadow:0 4px 20px rgba(0,0,0,0.3);';
-      loadingAlert.innerHTML = `
-        <div style="text-align:center;">
-          <div style="margin-bottom:12px;font-size:24px;">⏳</div>
-          <div style="font-weight:600;">Preparing Export...</div>
-          <div style="font-size:13px;opacity:0.7;margin-top:8px;">Large datasets may take several minutes</div>
-        </div>
-      `;
-      document.body.appendChild(loadingAlert);
+      // Show loading
+      showLoading();
 
       console.log('🔄 Starting export:', url);
 
-      // Use fetch for better streaming support
+      // Use fetch for streaming support
       const baseUrl = import.meta.env.VITE_API_URL || '/api';
       const fullUrl = `${baseUrl}${url}`;
 
@@ -294,18 +304,32 @@ export default function Dashboard() {
         },
       });
 
-      // Remove loading
-      document.getElementById('export-loading')?.remove();
+      // Hide loading
+      hideLoading();
 
+      // Check if response is OK
       if (!response.ok) {
+        // Clone response before reading to avoid "body already read" error
+        const errorText = await response.clone().text();
         let errorMsg = `HTTP ${response.status}`;
+        
         try {
-          const errorData = await response.json();
-          errorMsg = errorData.error || errorMsg;
+          const errorJson = JSON.parse(errorText);
+          errorMsg = errorJson.error || errorJson.message || errorMsg;
         } catch {
-          errorMsg = await response.text() || errorMsg;
+          errorMsg = errorText || errorMsg;
         }
+        
         throw new Error(errorMsg);
+      }
+
+      // Get content type to verify it's a file
+      const contentType = response.headers.get('Content-Type') || '';
+      
+      // Check if we got JSON error instead of file
+      if (contentType.includes('application/json')) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || errorData.message || 'Server returned JSON instead of file');
       }
 
       // Get filename from header
@@ -321,8 +345,8 @@ export default function Dashboard() {
       // Download as blob
       const blob = await response.blob();
 
-      if (blob.size === 0) {
-        throw new Error('Server returned empty file');
+      if (!blob || blob.size === 0) {
+        throw new Error('Server returned empty file. Try applying filters to reduce data size.');
       }
 
       console.log(`✅ Downloaded: ${filename} (${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
@@ -338,19 +362,32 @@ export default function Dashboard() {
 
       // Cleanup
       setTimeout(() => {
-        document.body.removeChild(link);
+        if (link.parentNode) {
+          document.body.removeChild(link);
+        }
         window.URL.revokeObjectURL(blobUrl);
-      }, 100);
+      }, 200);
 
       // Success message
-      alert(`✅ Export completed!\n\nFile: ${filename}\nRecords: ${totalCount || 'N/A'}\nSize: ${(blob.size / 1024 / 1024).toFixed(2)} MB`);
+      const sizeInMB = (blob.size / 1024 / 1024).toFixed(2);
+      alert(`✅ Export completed!\n\nFile: ${filename}\nRecords: ${totalCount || 'N/A'}\nSize: ${sizeInMB} MB`);
 
     } catch (err) {
-      // Remove loading on error
-      document.getElementById('export-loading')?.remove();
+      // Hide loading on error
+      hideLoading();
 
       console.error('❌ Export error:', err);
-      alert(`❌ Export failed!\n\n${err.message}\n\nTry:\n• Apply more filters to reduce data\n• Use CSV instead of XLSX\n• Contact support if issue persists`);
+      
+      let errorMessage = err.message || 'Unknown error';
+      
+      // Clean up error message
+      if (errorMessage.includes('Failed to fetch')) {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      } else if (errorMessage.includes('body stream')) {
+        errorMessage = 'Download interrupted. Please try again.';
+      }
+      
+      alert(`❌ Export failed!\n\n${errorMessage}\n\nTips:\n• Apply filters to reduce data size\n• Try CSV format instead of XLSX\n• Check your internet connection`);
     }
   };
 
