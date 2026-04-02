@@ -250,146 +250,155 @@ export default function Dashboard() {
   };
 
   const handleExport = async (format, onlySelected = false) => {
-    // Create loading element
-    const showLoading = () => {
-      const loadingAlert = document.createElement('div');
-      loadingAlert.id = 'export-loading';
-      loadingAlert.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#1e293b;color:#fff;padding:24px 48px;border-radius:12px;z-index:9999;font-size:16px;box-shadow:0 4px 20px rgba(0,0,0,0.3);';
-      loadingAlert.innerHTML = `
-        <div style="text-align:center;">
-          <div style="margin-bottom:12px;font-size:24px;">⏳</div>
-          <div style="font-weight:600;">Preparing Export...</div>
-          <div style="font-size:13px;opacity:0.7;margin-top:8px;">Large datasets may take several minutes</div>
-        </div>
-      `;
-      document.body.appendChild(loadingAlert);
-    };
+  const showLoading = () => {
+    const loadingAlert = document.createElement('div');
+    loadingAlert.id = 'export-loading';
+    loadingAlert.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#1e293b;color:#fff;padding:24px 48px;border-radius:12px;z-index:9999;font-size:16px;box-shadow:0 4px 20px rgba(0,0,0,0.3);';
+    loadingAlert.innerHTML = `
+      <div style="text-align:center;">
+        <div style="margin-bottom:12px;font-size:24px;">⏳</div>
+        <div style="font-weight:600;">Preparing Export...</div>
+        <div style="font-size:13px;opacity:0.7;margin-top:8px;">Large datasets may take several minutes</div>
+      </div>
+    `;
+    document.body.appendChild(loadingAlert);
+  };
 
-    const hideLoading = () => {
-      const el = document.getElementById('export-loading');
-      if (el) el.remove();
-    };
+  const hideLoading = () => {
+    const el = document.getElementById('export-loading');
+    if (el) el.remove();
+  };
 
-    try {
-      // Build params
-      const params = new URLSearchParams({ search: debouncedSearch, format });
-      
-      for (const key in multiFilters) {
-        if (multiFilters[key].length > 0) {
-          params.append(key, multiFilters[key].join(","));
-        }
+  try {
+    // Build params
+    const params = new URLSearchParams({ search: debouncedSearch, format });
+    
+    for (const key in multiFilters) {
+      if (multiFilters[key].length > 0) {
+        params.append(key, multiFilters[key].join(","));
       }
+    }
+    
+    let exportPath = `/users/export?${params.toString()}`;
+    if (onlySelected && selectedFields.length > 0) {
+      exportPath += `&fields=${encodeURIComponent(selectedFields.join(","))}`;
+    }
+
+    // Close dropdown
+    setExportOpen(false);
+    showLoading();
+
+    // ✅ FIX: Build correct full URL
+    let baseUrl = import.meta.env.VITE_API_URL;
+    
+    // If VITE_API_URL is not set, use relative /api
+    if (!baseUrl) {
+      baseUrl = '/api';
+    }
+    
+    // Remove trailing slash if present
+    baseUrl = baseUrl.replace(/\/$/, '');
+    
+    // Make sure baseUrl ends with /api
+    if (!baseUrl.endsWith('/api')) {
+      baseUrl = baseUrl + '/api';
+    }
+    
+    const fullUrl = `${baseUrl}${exportPath}`;
+    
+    console.log('🔄 Export URL:', fullUrl);
+
+    const response = await fetch(fullUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+      },
+    });
+
+    hideLoading();
+
+    // Check if response is OK
+    if (!response.ok) {
+      const contentType = response.headers.get('Content-Type') || '';
+      let errorMsg = `HTTP ${response.status}`;
       
-      let url = `/users/export?${params.toString()}`;
-      if (onlySelected && selectedFields.length > 0) {
-        url += `&fields=${encodeURIComponent(selectedFields.join(","))}`;
-      }
-
-      // Close dropdown
-      setExportOpen(false);
-
-      // Show loading
-      showLoading();
-
-      console.log('🔄 Starting export:', url);
-
-      // Use fetch for streaming support
-      const baseUrl = import.meta.env.VITE_API_URL || '/api';
-      const fullUrl = `${baseUrl}${url}`;
-
-      const response = await fetch(fullUrl, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-
-      // Hide loading
-      hideLoading();
-
-      // Check if response is OK
-      if (!response.ok) {
-        // Clone response before reading to avoid "body already read" error
-        const errorText = await response.clone().text();
-        let errorMsg = `HTTP ${response.status}`;
-        
+      if (contentType.includes('text/html')) {
+        // Server returned HTML error page
+        errorMsg = `Server error (${response.status}). The export endpoint may not be available.`;
+      } else {
         try {
+          const errorText = await response.text();
           const errorJson = JSON.parse(errorText);
           errorMsg = errorJson.error || errorJson.message || errorMsg;
         } catch {
-          errorMsg = errorText || errorMsg;
+          // Keep default error message
         }
-        
-        throw new Error(errorMsg);
-      }
-
-      // Get content type to verify it's a file
-      const contentType = response.headers.get('Content-Type') || '';
-      
-      // Check if we got JSON error instead of file
-      if (contentType.includes('application/json')) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || errorData.message || 'Server returned JSON instead of file');
-      }
-
-      // Get filename from header
-      const disposition = response.headers.get('Content-Disposition');
-      const totalCount = response.headers.get('X-Total-Count');
-      let filename = `users_export.${format}`;
-      
-      if (disposition) {
-        const match = disposition.match(/filename="?([^"]+)"?/);
-        if (match) filename = match[1];
-      }
-
-      // Download as blob
-      const blob = await response.blob();
-
-      if (!blob || blob.size === 0) {
-        throw new Error('Server returned empty file. Try applying filters to reduce data size.');
-      }
-
-      console.log(`✅ Downloaded: ${filename} (${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
-
-      // Create download link
-      const blobUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = filename;
-      link.style.display = 'none';
-      document.body.appendChild(link);
-      link.click();
-
-      // Cleanup
-      setTimeout(() => {
-        if (link.parentNode) {
-          document.body.removeChild(link);
-        }
-        window.URL.revokeObjectURL(blobUrl);
-      }, 200);
-
-      // Success message
-      const sizeInMB = (blob.size / 1024 / 1024).toFixed(2);
-      alert(`✅ Export completed!\n\nFile: ${filename}\nRecords: ${totalCount || 'N/A'}\nSize: ${sizeInMB} MB`);
-
-    } catch (err) {
-      // Hide loading on error
-      hideLoading();
-
-      console.error('❌ Export error:', err);
-      
-      let errorMessage = err.message || 'Unknown error';
-      
-      // Clean up error message
-      if (errorMessage.includes('Failed to fetch')) {
-        errorMessage = 'Network error. Please check your connection and try again.';
-      } else if (errorMessage.includes('body stream')) {
-        errorMessage = 'Download interrupted. Please try again.';
       }
       
-      alert(`❌ Export failed!\n\n${errorMessage}\n\nTips:\n• Apply filters to reduce data size\n• Try CSV format instead of XLSX\n• Check your internet connection`);
+      throw new Error(errorMsg);
     }
-  };
+
+    // Get content type to verify it's a file
+    const contentType = response.headers.get('Content-Type') || '';
+    
+    if (contentType.includes('application/json')) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || errorData.message || 'Server returned error');
+    }
+
+    // Get filename from header
+    const disposition = response.headers.get('Content-Disposition');
+    const totalCount = response.headers.get('X-Total-Count');
+    let filename = `users_export.${format}`;
+    
+    if (disposition) {
+      const match = disposition.match(/filename="?([^"]+)"?/);
+      if (match) filename = match[1];
+    }
+
+    // Download as blob
+    const blob = await response.blob();
+
+    if (!blob || blob.size === 0) {
+      throw new Error('Server returned empty file.');
+    }
+
+    console.log(`✅ Downloaded: ${filename} (${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
+
+    // Create download link
+    const blobUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = filename;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+
+    // Cleanup
+    setTimeout(() => {
+      if (link.parentNode) {
+        document.body.removeChild(link);
+      }
+      window.URL.revokeObjectURL(blobUrl);
+    }, 200);
+
+    // Success message
+    const sizeInMB = (blob.size / 1024 / 1024).toFixed(2);
+    alert(`✅ Export completed!\n\nFile: ${filename}\nRecords: ${totalCount || 'N/A'}\nSize: ${sizeInMB} MB`);
+
+  } catch (err) {
+    hideLoading();
+    console.error('❌ Export error:', err);
+    
+    let errorMessage = err.message || 'Unknown error';
+    
+    if (errorMessage.includes('Failed to fetch')) {
+      errorMessage = 'Network error. Please check your connection.';
+    }
+    
+    alert(`❌ Export failed!\n\n${errorMessage}`);
+  }
+};
 
   const activeFiltersCount = useMemo(
     () => Object.values(multiFilters).reduce((acc, arr) => acc + (arr?.length || 0), 0),
