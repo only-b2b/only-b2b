@@ -7,13 +7,16 @@ const exportSnapshotSchema = new mongoose.Schema(
 
     // what they exported
     format: { type: String, enum: ['csv', 'xlsx'], required: true },
-    fields: [{ type: String }],          // selected fields (if any)
-    filters: { type: Object },           // search + multi-filters used
+    fields: [{ type: String }],
+    filters: { type: Object },
 
-    total: { type: Number, required: true }, // how many rows were exported
+    total: { type: Number, required: true },
 
-    // exact records (by _id from Users collection)
+    // exact records (by _id from Users collection) - LIMITED for large exports
     itemIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+
+    // true if itemIds is a sample (not all IDs stored)
+    isSampled: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

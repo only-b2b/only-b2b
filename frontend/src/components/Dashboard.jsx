@@ -251,26 +251,106 @@ export default function Dashboard() {
 
   const handleExport = async (format, onlySelected = false) => {
     try {
+      // Build params
       const params = new URLSearchParams({ search: debouncedSearch, format });
+      
       for (const key in multiFilters) {
         if (multiFilters[key].length > 0) {
           params.append(key, multiFilters[key].join(","));
         }
       }
+      
       let url = `/users/export?${params.toString()}`;
       if (onlySelected && selectedFields.length > 0) {
         url += `&fields=${encodeURIComponent(selectedFields.join(","))}`;
       }
-      const res = await api.get(url, { responseType: "blob" });
-      const fileURL = window.URL.createObjectURL(new Blob([res.data]));
-      const link = document.createElement("a");
-      link.href = fileURL;
-      link.setAttribute("download", `users.${format}`);
+
+      // Close dropdown
+      setExportOpen(false);
+
+      // Show loading message
+      const loadingAlert = document.createElement('div');
+      loadingAlert.id = 'export-loading';
+      loadingAlert.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#1e293b;color:#fff;padding:24px 48px;border-radius:12px;z-index:9999;font-size:16px;box-shadow:0 4px 20px rgba(0,0,0,0.3);';
+      loadingAlert.innerHTML = `
+        <div style="text-align:center;">
+          <div style="margin-bottom:12px;font-size:24px;">⏳</div>
+          <div style="font-weight:600;">Preparing Export...</div>
+          <div style="font-size:13px;opacity:0.7;margin-top:8px;">Large datasets may take several minutes</div>
+        </div>
+      `;
+      document.body.appendChild(loadingAlert);
+
+      console.log('🔄 Starting export:', url);
+
+      // Use fetch for better streaming support
+      const baseUrl = import.meta.env.VITE_API_URL || '/api';
+      const fullUrl = `${baseUrl}${url}`;
+
+      const response = await fetch(fullUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+
+      // Remove loading
+      document.getElementById('export-loading')?.remove();
+
+      if (!response.ok) {
+        let errorMsg = `HTTP ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMsg = errorData.error || errorMsg;
+        } catch {
+          errorMsg = await response.text() || errorMsg;
+        }
+        throw new Error(errorMsg);
+      }
+
+      // Get filename from header
+      const disposition = response.headers.get('Content-Disposition');
+      const totalCount = response.headers.get('X-Total-Count');
+      let filename = `users_export.${format}`;
+      
+      if (disposition) {
+        const match = disposition.match(/filename="?([^"]+)"?/);
+        if (match) filename = match[1];
+      }
+
+      // Download as blob
+      const blob = await response.blob();
+
+      if (blob.size === 0) {
+        throw new Error('Server returned empty file');
+      }
+
+      console.log(`✅ Downloaded: ${filename} (${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
+
+      // Create download link
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      link.style.display = 'none';
       document.body.appendChild(link);
       link.click();
-      link.remove();
+
+      // Cleanup
+      setTimeout(() => {
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(blobUrl);
+      }, 100);
+
+      // Success message
+      alert(`✅ Export completed!\n\nFile: ${filename}\nRecords: ${totalCount || 'N/A'}\nSize: ${(blob.size / 1024 / 1024).toFixed(2)} MB`);
+
     } catch (err) {
-      alert("Export failed: " + err.message);
+      // Remove loading on error
+      document.getElementById('export-loading')?.remove();
+
+      console.error('❌ Export error:', err);
+      alert(`❌ Export failed!\n\n${err.message}\n\nTry:\n• Apply more filters to reduce data\n• Use CSV instead of XLSX\n• Contact support if issue persists`);
     }
   };
 
